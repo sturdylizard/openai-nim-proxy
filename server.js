@@ -20,16 +20,8 @@ const SHOW_REASONING = true; // Set to true to show reasoning with <think> tags
 // 🔥 THINKING MODE TOGGLE - Enables thinking for specific models that support it
 const ENABLE_THINKING_MODE = false; // Set to true to enable chat_template_kwargs thinking parameter
 
-// Model mapping (adjust based on available NIM models)
-const MODEL_MAPPING = {
-  'gpt-3.5-turbo': 'nvidia/llama-3.1-nemotron-ultra-253b-v1',
-  'gpt-4': 'qwen/qwen3-coder-480b-a35b-instruct',
-  'gpt-4-turbo': 'moonshotai/kimi-k2-instruct-0905',
-  'gpt-4o': 'deepseek-ai/deepseek-v3.1',
-  'claude-3-opus': 'openai/gpt-oss-120b',
-  'claude-3-sonnet': 'openai/gpt-oss-20b',
-  'gemini-pro': 'qwen/qwen3-next-80b-a3b-thinking' 
-};
+// The NVIDIA NIM model
+const TARGET_MODEL = 'deepseek-ai/deepseek-v3.1'; // <-- Change this to your preferred model
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -43,16 +35,14 @@ app.get('/health', (req, res) => {
 
 // List models endpoint (OpenAI compatible)
 app.get('/v1/models', (req, res) => {
-  const models = Object.keys(MODEL_MAPPING).map(model => ({
-    id: model,
-    object: 'model',
-    created: Date.now(),
-    owned_by: 'nvidia-nim-proxy'
-  }));
-  
   res.json({
     object: 'list',
-    data: models
+    data: [{
+      id: TARGET_MODEL,
+      object: 'model',
+      created: Date.now(),
+      owned_by: 'nvidia-nim-proxy'
+    }]
   });
 });
 
@@ -61,35 +51,8 @@ app.post('/v1/chat/completions', async (req, res) => {
   try {
     const { model, messages, temperature, max_tokens, stream } = req.body;
     
-    // Smart model selection with fallback
-    let nimModel = MODEL_MAPPING[model];
-    if (!nimModel) {
-      try {
-        await axios.post(`${NIM_API_BASE}/chat/completions`, {
-          model: model,
-          messages: [{ role: 'user', content: 'test' }],
-          max_tokens: 1
-        }, {
-          headers: { 'Authorization': `Bearer ${NIM_API_KEY}`, 'Content-Type': 'application/json' },
-          validateStatus: (status) => status < 500
-        }).then(res => {
-          if (res.status >= 200 && res.status < 300) {
-            nimModel = model;
-          }
-        });
-      } catch (e) {}
-      
-      if (!nimModel) {
-        const modelLower = model.toLowerCase();
-        if (modelLower.includes('gpt-4') || modelLower.includes('claude-opus') || modelLower.includes('405b')) {
-          nimModel = 'meta/llama-3.1-405b-instruct';
-        } else if (modelLower.includes('claude') || modelLower.includes('gemini') || modelLower.includes('70b')) {
-          nimModel = 'meta/llama-3.1-70b-instruct';
-        } else {
-          nimModel = 'meta/llama-3.1-8b-instruct';
-        }
-      }
-    }
+        // Force all requests to use the single target model
+    const nimModel = TARGET_MODEL;
     
     // Transform OpenAI request to NIM format
     const nimRequest = {
