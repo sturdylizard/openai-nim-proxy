@@ -15,7 +15,7 @@ const NIM_API_BASE = process.env.NIM_API_BASE || 'https://integrate.api.nvidia.c
 const NIM_API_KEY = process.env.NIM_API_KEY;
 
 // 🔥  DISPLAY TOGGLE - Shows/hides  in output
-const SHOW_ = false; // Set to true to show reasoning with <think> tags
+const SHOW_ = true; // Set to true to show reasoning with <think> tags
 
 // 🔥 THINKING MODE TOGGLE - Enables thinking for specific models that support it
 const ENABLE_THINKING_MODE = false; // Set to true to enable chat_template_kwargs thinking parameter
