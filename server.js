@@ -14,8 +14,8 @@ app.use(express.json());
 const NIM_API_BASE = process.env.NIM_API_BASE || 'https://integrate.api.nvidia.com/v1';
 const NIM_API_KEY = process.env.NIM_API_KEY;
 
-// 🔥 REASONING DISPLAY TOGGLE - Shows/hides reasoning in output
-const SHOW_REASONING = true; // Set to true to show reasoning with <think> tags
+// 🔥  DISPLAY TOGGLE - Shows/hides  in output
+const SHOW_ = false; // Set to true to show reasoning with <think> tags
 
 // 🔥 THINKING MODE TOGGLE - Enables thinking for specific models that support it
 const ENABLE_THINKING_MODE = false; // Set to true to enable chat_template_kwargs thinking parameter
@@ -28,7 +28,7 @@ app.get('/health', (req, res) => {
   res.json({ 
     status: 'ok', 
     service: 'OpenAI to NVIDIA NIM Proxy', 
-    reasoning_display: SHOW_REASONING,
+    _display: SHOW_,
     thinking_mode: ENABLE_THINKING_MODE
   });
 });
@@ -74,13 +74,13 @@ app.post('/v1/chat/completions', async (req, res) => {
     });
     
     if (stream) {
-      // Handle streaming response with reasoning
+      // Handle streaming response with 
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
       
       let buffer = '';
-      let reasoningStarted = false;
+      let Started = false;
       
       response.data.on('data', (chunk) => {
         buffer += chunk.toString();
@@ -97,29 +97,29 @@ app.post('/v1/chat/completions', async (req, res) => {
             try {
               const data = JSON.parse(line.slice(6));
               if (data.choices?.[0]?.delta) {
-                const reasoning = data.choices[0].delta.reasoning_content;
+                const  = data.choices[0].delta._content;
                 const content = data.choices[0].delta.content;
                 
-                if (SHOW_REASONING) {
+                if (SHOW_) {
                   let combinedContent = '';
                   
-                  if (reasoning && !reasoningStarted) {
-                    combinedContent = '<think>\n' + reasoning;
-                    reasoningStarted = true;
-                  } else if (reasoning) {
-                    combinedContent = reasoning;
+                  if ( && !Started) {
+                    combinedContent = '<think>\n' + ;
+                    Started = true;
+                  } else if () {
+                    combinedContent = ;
                   }
                   
-                  if (content && reasoningStarted) {
+                  if (content && Started) {
                     combinedContent += '</think>\n\n' + content;
-                    reasoningStarted = false;
+                    Started = false;
                   } else if (content) {
                     combinedContent += content;
                   }
                   
                   if (combinedContent) {
                     data.choices[0].delta.content = combinedContent;
-                    delete data.choices[0].delta.reasoning_content;
+                    delete data.choices[0].delta._content;
                   }
                 } else {
                   if (content) {
@@ -127,7 +127,7 @@ app.post('/v1/chat/completions', async (req, res) => {
                   } else {
                     data.choices[0].delta.content = '';
                   }
-                  delete data.choices[0].delta.reasoning_content;
+                  delete data.choices[0].delta._content;
                 }
               }
               res.write(`data: ${JSON.stringify(data)}\n\n`);
@@ -144,7 +144,7 @@ app.post('/v1/chat/completions', async (req, res) => {
         res.end();
       });
     } else {
-      // Transform NIM response to OpenAI format with reasoning
+      // Transform NIM response to OpenAI format with 
       const openaiResponse = {
         id: `chatcmpl-${Date.now()}`,
         object: 'chat.completion',
@@ -153,8 +153,8 @@ app.post('/v1/chat/completions', async (req, res) => {
         choices: response.data.choices.map(choice => {
           let fullContent = choice.message?.content || '';
           
-          if (SHOW_REASONING && choice.message?.reasoning_content) {
-            fullContent = '<think>\n' + choice.message.reasoning_content + '\n</think>\n\n' + fullContent;
+          if (SHOW_ && choice.message?._content) {
+            fullContent = '<think>\n' + choice.message._content + '\n</think>\n\n' + fullContent;
           }
           
           return {
@@ -203,6 +203,6 @@ app.all('*', (req, res) => {
 app.listen(PORT, () => {
   console.log(`OpenAI to NVIDIA NIM Proxy running on port ${PORT}`);
   console.log(`Health check: http://localhost:${PORT}/health`);
-  console.log(`Reasoning display: ${SHOW_REASONING ? 'ENABLED' : 'DISABLED'}`);
+  console.log(` display: ${SHOW_ ? 'ENABLED' : 'DISABLED'}`);
   console.log(`Thinking mode: ${ENABLE_THINKING_MODE ? 'ENABLED' : 'DISABLED'}`);
 });
