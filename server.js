@@ -15,7 +15,7 @@ const NIM_API_BASE = process.env.NIM_API_BASE || 'https://integrate.api.nvidia.c
 const NIM_API_KEY = process.env.NIM_API_KEY;
 
 // 🔥  DISPLAY TOGGLE - Shows/hides  in output
-const SHOW_ = true; // Set to true to show reasoning with <think> tags
+const SHOW_ = false; // Set to true to show reasoning with <think> tags
 
 // 🔥 THINKING MODE TOGGLE - Enables thinking for specific models that support it
 const ENABLE_THINKING_MODE = false; // Set to true to enable chat_template_kwargs thinking parameter
@@ -82,61 +82,63 @@ app.post('/v1/chat/completions', async (req, res) => {
       let buffer = '';
       let Started = false;
       
-      response.data.on('data', (chunk) => {
-        buffer += chunk.toString();
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-        
-        lines.forEach(line => {
-          if (line.startsWith('data: ')) {
+// Inside the streaming response handling
+response.data.on('data', (chunk) => {
+    buffer += chunk.toString();
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+
+    lines.forEach(line => {
+        if (line.startsWith('data: ')) {
             if (line.includes('[DONE]')) {
-              res.write(line + '\n');
-              return;
+                res.write(line + '\n');
+                return;
             }
-            
+
             try {
-              const data = JSON.parse(line.slice(6));
-              if (data.choices?.[0]?.delta) {
-                const  = data.choices[0].delta._content;
-                const content = data.choices[0].delta.content;
-                
-                if (SHOW_) {
-                  let combinedContent = '';
-                  
-                  if ( && !Started) {
-                    combinedContent = '<think>\n' + ;
-                    Started = true;
-                  } else if () {
-                    combinedContent = ;
-                  }
-                  
-                  if (content && Started) {
-                    combinedContent += '</think>\n\n' + content;
-                    Started = false;
-                  } else if (content) {
-                    combinedContent += content;
-                  }
-                  
-                  if (combinedContent) {
-                    data.choices[0].delta.content = combinedContent;
-                    delete data.choices[0].delta._content;
-                  }
-                } else {
-                  if (content) {
-                    data.choices[0].delta.content = content;
-                  } else {
-                    data.choices[0].delta.content = '';
-                  }
-                  delete data.choices[0].delta._content;
+                const data = JSON.parse(line.slice(6));
+                if (data.choices?.[0]?.delta) {
+                    const deltaContent = data.choices[0].delta._content; // Get the reasoning content
+                    const content = data.choices[0].delta.content; // Get the main content
+
+                    if (SHOW_) {
+                        let combinedContent = '';
+
+                        // If deltaContent exists and we haven't started the <think> tag
+                        if (deltaContent && !Started) {
+                            combinedContent = '<think>\n' + deltaContent; // Start with reasoning
+                            Started = true;
+                        }
+
+                        // If we have content to append
+                        if (content) {
+                            if (Started) {
+                                combinedContent += '</think>\n\n' + content; // Close the <think> tag and add content
+                                Started = false; // Reset Started for the next iteration
+                            } else {
+                                combinedContent += content; // Just add content if <think> is not started
+                            }
+                        }
+
+                        // Update the content in the response
+                        if (combinedContent) {
+                            data.choices[0].delta.content = combinedContent;
+                            delete data.choices[0].delta._content; // Clean up the original content
+                        }
+                    } else {
+                        // If SHOW_ is false, just set the content directly
+                        data.choices[0].delta.content = content || ''; // Ensure it's not undefined
+                        delete data.choices[0].delta._content; // Clean up the original content
+                    }
                 }
-              }
-              res.write(`data: ${JSON.stringify(data)}\n\n`);
+                res.write(`data: ${JSON.stringify(data)}\n\n`);
             } catch (e) {
-              res.write(line + '\n');
+                console.error('Error parsing data:', e); // Log the error
+                res.write(line + '\n');
             }
-          }
-        });
-      });
+        }
+    });
+});
       
       response.data.on('end', () => res.end());
       response.data.on('error', (err) => {
