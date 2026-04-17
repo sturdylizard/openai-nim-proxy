@@ -21,7 +21,7 @@ const SHOW_ = false; // Set to true to show reasoning with <think> tags
 const ENABLE_THINKING_MODE = false; // Set to true to enable chat_template_kwargs thinking parameter
 
 // The NVIDIA NIM model
-const TARGET_MODEL = 'deepseek-ai/deepseek-v3.2'; // <-- Change this to your preferred model
+const TARGET_MODEL = 'moonshotai/kimi-k2-thinking'; // <-- Change this to your preferred model
 
 // Health check endpoint
 app.get('/health', (req, res) => {
