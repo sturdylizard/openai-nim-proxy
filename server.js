@@ -14,8 +14,8 @@ app.use(express.json());
 const NIM_API_BASE = process.env.NIM_API_BASE || 'https://integrate.api.nvidia.com/v1';
 const NIM_API_KEY = process.env.NIM_API_KEY;
 
-// 🔥 DISPLAY TOGGLE - Shows/hides in output
-const SHOW_ = true; // Set to true to show reasoning with <think> tags
+// 🔥  DISPLAY TOGGLE - Shows/hides  in output
+const SHOW_ = false; // Set to true to show reasoning with <think> tags
 
 // 🔥 THINKING MODE TOGGLE - Enables thinking for specific models that support it
 const ENABLE_THINKING_MODE = false; // Set to true to enable chat_template_kwargs thinking parameter
@@ -46,29 +46,24 @@ app.get('/v1/models', (req, res) => {
   });
 });
 
-// Helper function to format content
-const formatContent = (content, deltaContent) => {
-  if (SHOW_) {
-    return `<think>\n${deltaContent}\n</think>\n\n${content}`;
-  }
-  return content || ''; // Ensure it's not undefined
-};
-
 // Chat completions endpoint (main proxy)
 app.post('/v1/chat/completions', async (req, res) => {
   try {
-    const { model, messages, temperature = 0.7, max_tokens = 9024, stream = false } = req.body;
-
-    // Force all requests to use the single target model
+    const { model, messages, temperature, max_tokens, stream } = req.body;
+    
+        // Force all requests to use the single target model
+    const nimModel = TARGET_MODEL;
+    
+    // Transform OpenAI request to NIM format
     const nimRequest = {
-      model: TARGET_MODEL,
-      messages,
-      temperature,
-      max_tokens,
+      model: nimModel,
+      messages: messages,
+      temperature: temperature || 0.7,
+      max_tokens: max_tokens || 9024,
       extra_body: ENABLE_THINKING_MODE ? { chat_template_kwargs: { thinking: true } } : undefined,
-      stream
+      stream: stream || false
     };
-
+    
     // Make request to NVIDIA NIM API
     const response = await axios.post(`${NIM_API_BASE}/chat/completions`, nimRequest, {
       headers: {
@@ -77,61 +72,92 @@ app.post('/v1/chat/completions', async (req, res) => {
       },
       responseType: stream ? 'stream' : 'json'
     });
-
+    
     if (stream) {
-      // Handle streaming response
+      // Handle streaming response with 
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
-
+      
       let buffer = '';
-      let isThinkingTagOpen = false;
+      let Started = false;
+      
+// Inside the streaming response handling
+response.data.on('data', (chunk) => {
+    buffer += chunk.toString();
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
 
-      response.data.on('data', (chunk) => {
-        buffer += chunk.toString();
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        lines.forEach(line => {
-          if (line.startsWith('data: ')) {
+    lines.forEach(line => {
+        if (line.startsWith('data: ')) {
             if (line.includes('[DONE]')) {
-              res.write(line + '\n');
-              return;
+                res.write(line + '\n');
+                return;
             }
 
             try {
-              const data = JSON.parse(line.slice(6));
-              if (data.choices?.[0]?.delta) {
-                const deltaContent = data.choices[0].delta._content; // Get the reasoning content
-                const content = data.choices[0].delta.content; // Get the main content
+                const data = JSON.parse(line.slice(6));
+                if (data.choices?.[0]?.delta) {
+                    const deltaContent = data.choices[0].delta._content; // Get the reasoning content
+                    const content = data.choices[0].delta.content; // Get the main content
 
-                data.choices[0].delta.content = formatContent(content, deltaContent);
-                delete data.choices[0].delta._content; // Clean up the original content;
-              }
-              res.write(`data: ${JSON.stringify(data)}\n\n`);
+                    if (SHOW_) {
+                        let combinedContent = '';
+
+                        // If deltaContent exists and we haven't started the <think> tag
+                        if (deltaContent && !Started) {
+                            combinedContent = '<think>\n' + deltaContent; // Start with reasoning
+                            Started = true;
+                        }
+
+                        // If we have content to append
+                        if (content) {
+                            if (Started) {
+                                combinedContent += '</think>\n\n' + content; // Close the <think> tag and add content
+                                Started = false; // Reset Started for the next iteration
+                            } else {
+                                combinedContent += content; // Just add content if <think> is not started
+                            }
+                        }
+
+                        // Update the content in the response
+                        if (combinedContent) {
+                            data.choices[0].delta.content = combinedContent;
+                            delete data.choices[0].delta._content; // Clean up the original content
+                        }
+                    } else {
+                        // If SHOW_ is false, just set the content directly
+                        data.choices[0].delta.content = content || ''; // Ensure it's not undefined
+                        delete data.choices[0].delta._content; // Clean up the original content
+                    }
+                }
+                res.write(`data: ${JSON.stringify(data)}\n\n`);
             } catch (e) {
-              console.error('Error parsing data:', e);
-              res.write(line + '\n');
+                console.error('Error parsing data:', e); // Log the error
+                res.write(line + '\n');
             }
-          }
-        });
-      });
-
+        }
+    });
+});
+      
       response.data.on('end', () => res.end());
       response.data.on('error', (err) => {
         console.error('Stream error:', err);
         res.end();
       });
     } else {
-      // Transform NIM response to OpenAI format
+      // Transform NIM response to OpenAI format with 
       const openaiResponse = {
         id: `chatcmpl-${Date.now()}`,
         object: 'chat.completion',
         created: Math.floor(Date.now() / 1000),
-        model,
+        model: model,
         choices: response.data.choices.map(choice => {
           let fullContent = choice.message?.content || '';
-          fullContent = formatContent(fullContent, choice.message?._content);
+          
+          if (SHOW_ && choice.message?._content) {
+            fullContent = '<think>\n' + choice.message._content + '\n</think>\n\n' + fullContent;
+          }
           
           return {
             index: choice.index,
@@ -148,11 +174,13 @@ app.post('/v1/chat/completions', async (req, res) => {
           total_tokens: 0
         }
       };
-
+      
       res.json(openaiResponse);
     }
+    
   } catch (error) {
-    console.error('Proxy error:', error); // Log the entire error object
+    console.error('Proxy error:', error.message);
+    
     res.status(error.response?.status || 500).json({
       error: {
         message: error.message || 'Internal server error',
@@ -174,10 +202,9 @@ app.all('*', (req, res) => {
   });
 });
 
-// Start the server
 app.listen(PORT, () => {
   console.log(`OpenAI to NVIDIA NIM Proxy running on port ${PORT}`);
   console.log(`Health check: http://localhost:${PORT}/health`);
-  console.log(`Display: ${SHOW_ ? 'ENABLED' : 'DISABLED'}`);
+  console.log(` display: ${SHOW_ ? 'ENABLED' : 'DISABLED'}`);
   console.log(`Thinking mode: ${ENABLE_THINKING_MODE ? 'ENABLED' : 'DISABLED'}`);
 });
