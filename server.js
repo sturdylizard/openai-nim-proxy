@@ -21,7 +21,7 @@ const SHOW_ = false; // Set to true to show reasoning with <think> tags
 const ENABLE_THINKING_MODE = false; // Set to true to enable chat_template_kwargs thinking parameter
 
 // The NVIDIA NIM model
-const TARGET_MODEL = 'mistralai/mistral-medium-3.5-128b'; // <-- Change this to your preferred model
+const TARGET_MODEL = 'qwen/qwen3.5-397b-a17b'; // <-- Change this to your preferred model
 
 // Health check endpoint
 app.get('/health', (req, res) => {
