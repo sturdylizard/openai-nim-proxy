@@ -21,7 +21,7 @@ if (!NIM_API_KEY) {
 const SHOW_REASONING = false;
 
 // Set to true to pass { thinking: true } to models that support it
-const ENABLE_THINKING_MODE = false;
+const ENABLE_THINKING_MODE = true;
 
 // ── Target model ─────────────────────────────────────────────────────────────
 const TARGET_MODEL = 'mistralai/mistral-medium-3.5-128b'; // Change to your preferred model
