@@ -24,7 +24,7 @@ const SHOW_REASONING = false;
 const ENABLE_THINKING_MODE = false;
 
 // ── Target model ─────────────────────────────────────────────────────────────
-const TARGET_MODEL = 'mistralai/mistral-medium-3.5-128b'; // Change to your preferred model
+const TARGET_MODEL = 'z-ai/glm-5.1'; // Change to your preferred model
 
 // ── Middleware ───────────────────────────────────────────────────────────────
 app.use(cors({
@@ -105,7 +105,7 @@ app.post('/v1/chat/completions', async (req, res) => {
           'Content-Type': 'application/json'
         },
         // Prevent hung connections from blocking the server indefinitely
-        timeout: 30_000,
+        timeout: 20_000,
         responseType: stream ? 'stream' : 'json'
       }
     );
