@@ -24,7 +24,7 @@ const SHOW_REASONING = false;
 const ENABLE_THINKING_MODE = false;
 
 // ── Target model ─────────────────────────────────────────────────────────────
-const TARGET_MODEL = 'minimaxai/minimax-m3'; // Change to your preferred model
+const TARGET_MODEL = 'qwen/qwen3.5-397b-a17b'; // Change to your preferred model
 
 // ── Middleware ───────────────────────────────────────────────────────────────
 app.use(cors({
