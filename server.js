@@ -214,23 +214,29 @@ app.post('/v1/chat/completions', async (req, res) => {
     }
 
   } catch (error) {
-    // Log full error server-side for debugging
-    console.error('Proxy error:', error.message);
-    if (error.response) {
-      console.error('Upstream status:', error.response.status);
-      console.error('Upstream body:',  JSON.stringify(error.response.data));
-    }
-
-    // Return a sanitised error to the client – no internal details leaked
-    res.status(error.response?.status || 500).json({
-      error: {
-        message: 'The proxy failed to complete the request. Check server logs for details.',
-        type:    'proxy_error',
-        code:    error.response?.status || 500
-      }
+  // Log full error server-side for debugging
+  console.error('Proxy error:', error.message);
+  if (error.response) {
+    console.error('Upstream status:', error.response.status);
+    
+    // Log specific properties instead of the whole object
+    const { status, data } = error.response;
+    console.error('Upstream body:', {
+      status,
+      message: data?.message || 'No message available',
+      // Add any other specific properties you want to log
     });
   }
-});
+
+  // Return a sanitized error to the client – no internal details leaked
+  res.status(error.response?.status || 500).json({
+    error: {
+      message: 'The proxy failed to complete the request. Check server logs for details.',
+      type:    'proxy_error',
+      code:    error.response?.status || 500
+    }
+  });
+}
 
 // ── 404 catch-all ────────────────────────────────────────────────────────────
 app.all('*', (req, res) => {
