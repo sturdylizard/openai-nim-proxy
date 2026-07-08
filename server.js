@@ -24,7 +24,7 @@ const SHOW_REASONING = false;
 const ENABLE_THINKING_MODE = false;
 
 // ── Target model ─────────────────────────────────────────────────────────────
-const TARGET_MODEL = 'deepseek-ai/deepseek-v4-pro'; // Change to your preferred model
+const TARGET_MODEL = 'qwen/qwen3-235b-a22b'; // Change to your preferred model
 
 // ── Middleware ───────────────────────────────────────────────────────────────
 app.use(cors({
@@ -33,6 +33,43 @@ app.use(cors({
   origin: process.env.ALLOWED_ORIGIN || '*'
 }));
 app.use(express.json());
+
+// ── Retry helper ─────────────────────────────────────────────────────────────
+/**
+ * Calls `fn` up to `maxAttempts` times, retrying only on 429 responses.
+ * Waits `baseDelayMs * 2^attempt` ms between tries (exponential backoff).
+ * Respects the `Retry-After` header from NVIDIA if present.
+ */
+async function withRetry(fn, maxAttempts = 3, baseDelayMs = 1000) {
+  let lastError;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      const status = err.response?.status;
+
+      if (status !== 429) throw err; // Not rate-limited – rethrow immediately
+
+      lastError = err;
+
+      // Honour Retry-After header if NVIDIA sends one (value is seconds)
+      const retryAfter = err.response?.headers?.['retry-after'];
+      const waitMs = retryAfter
+        ? parseFloat(retryAfter) * 1000
+        : baseDelayMs * Math.pow(2, attempt);
+
+      console.warn(
+        `Rate limited (429). Attempt ${attempt + 1}/${maxAttempts}. ` +
+        `Retrying in ${Math.round(waitMs)}ms…`
+      );
+
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
+    }
+  }
+
+  throw lastError; // All attempts exhausted
+}
 
 // ── Helper ───────────────────────────────────────────────────────────────────
 /**
@@ -96,18 +133,20 @@ app.post('/v1/chat/completions', async (req, res) => {
   };
 
   try {
-    const response = await axios.post(
-      `${NIM_API_BASE}/chat/completions`,
-      nimRequest,
-      {
-        headers: {
-          Authorization: `Bearer ${NIM_API_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        // Prevent hung connections from blocking the server indefinitely
-        timeout: 20_000,
-        responseType: stream ? 'stream' : 'json'
-      }
+    const response = await withRetry(() =>
+      axios.post(
+        `${NIM_API_BASE}/chat/completions`,
+        nimRequest,
+        {
+          headers: {
+            Authorization: `Bearer ${NIM_API_KEY}`,
+            'Content-Type': 'application/json'
+          },
+          // Prevent hung connections from blocking the server indefinitely
+          timeout: 30_000,
+          responseType: stream ? 'stream' : 'json'
+        }
+      )
     );
 
     // ── Streaming path ──────────────────────────────────────────────────────
@@ -218,16 +257,30 @@ app.post('/v1/chat/completions', async (req, res) => {
     console.error('Proxy error:', error.message);
     if (error.response) {
       console.error('Upstream status:', error.response.status);
-      console.error('Upstream body:',  JSON.stringify(error.response.data));
+
+      // When responseType is 'stream', error.response.data is a raw Node.js
+      // stream/socket — not parsed JSON — so JSON.stringify() would throw a
+      // "circular structure" TypeError. Guard against that here.
+      const rawData = error.response.data;
+      if (rawData && typeof rawData === 'object' && typeof rawData.pipe === 'function') {
+        console.error('Upstream body: <stream — not serialisable; check upstream logs>');
+      } else {
+        try {
+          console.error('Upstream body:', JSON.stringify(rawData));
+        } catch {
+          console.error('Upstream body: <could not serialise response data>');
+        }
+      }
     }
 
     // Return a sanitised error to the client – no internal details leaked
-    res.status(error.response?.status || 500).json({
-      error: {
-        message: 'The proxy failed to complete the request. Check server logs for details.',
-        type:    'proxy_error',
-        code:    error.response?.status || 500
-      }
+    const status = error.response?.status || 500;
+    const message = status === 429
+      ? 'The upstream NVIDIA NIM API is rate-limiting this proxy. Please try again shortly.'
+      : 'The proxy failed to complete the request. Check server logs for details.';
+
+    res.status(status).json({
+      error: { message, type: 'proxy_error', code: status }
     });
   }
 });
