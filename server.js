@@ -24,7 +24,7 @@ const SHOW_REASONING = false;
 const ENABLE_THINKING_MODE = false;
 
 // ── Target model ─────────────────────────────────────────────────────────────
-const TARGET_MODEL = 'qwen/qwen3.5-397b-a17b'; // Change to your preferred model
+const TARGET_MODEL = 'deepseek-ai/deepseek-v4-pro'; // Change to your preferred model
 
 // ── Middleware ───────────────────────────────────────────────────────────────
 app.use(cors({
