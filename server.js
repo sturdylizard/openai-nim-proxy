@@ -41,9 +41,9 @@ const MODEL_REGISTRY = {
   'balanced' : 'mistralai/mistral-medium-3.5-128b',  // Good speed/quality mix
 
   // ── Short brand names ─────────────────────────────────────────────────────
-  'GLM'        : 'z-ai/glm-5.2',
-  'DeepSeek'   : 'deepseek-ai/deepseek-v4-pro',
-  'Qwen'       : 'qwen/qwen3.5-397b-a17b',
+  'glm'        : 'z-ai/glm-5.2',
+  'deepseek'   : 'deepseek-ai/deepseek-v4-pro',
+  'qwen'       : 'qwen/qwen3.5-397b-a17b',
 
   // ── Add your own below ────────────────────────────────────────────────────
   // 'mymodel' : 'nvidia/some-other-model-id',
