@@ -1,12 +1,12 @@
 // server.js - OpenAI to NVIDIA NIM API Proxy
 const express = require('express');
-const cors = require('cors');
-const axios = require('axios');
+const cors    = require('cors');
+const axios   = require('axios');
 
-const app = express();
+const app  = express();
 const PORT = process.env.PORT || 3000;
 
-// ── NVIDIA NIM API configuration ────────────────────────────────────────────
+// ── NVIDIA NIM API configuration ─────────────────────────────────────────────
 const NIM_API_BASE = process.env.NIM_API_BASE || 'https://integrate.api.nvidia.com/v1';
 const NIM_API_KEY  = process.env.NIM_API_KEY;
 
@@ -23,13 +23,51 @@ const SHOW_REASONING = false;
 // Set to true to pass { thinking: true } to models that support it
 const ENABLE_THINKING_MODE = false;
 
-// ── Target model ─────────────────────────────────────────────────────────────
-const TARGET_MODEL = 'deepseek-ai/deepseek-v4-pro'; // Change to your preferred model
+// ── Model registry ───────────────────────────────────────────────────────────
+// Add or remove models here. The key is what you type into JanitorAI's
+// "Model" field; the value is the real NVIDIA NIM model string.
+//
+// HOW TO SWITCH MODELS IN JANITORAI:
+//   1. Set your API base URL to this proxy's address.
+//   2. In the "Model" field, type one of the shorthand keys below
+//      (e.g. "fast", "smart") — or paste any full NIM model ID directly.
+//   3. The proxy resolves the name and forwards to the right model.
+//
+const MODEL_REGISTRY = {
+  // ── Shorthand aliases ─────────────────────────────────────────────────────
+  'default'  : 'deepseek-ai/deepseek-v4-pro',
+  'fast'     : 'nvidia/nemotron-3-super-120b-a12b',        // Smaller, quicker
+  'smart'    : 'minimaxai/minimax-m3',               // Largest, best reasoning
+  'balanced' : 'mistralai/mistral-medium-3.5-128b',  // Good speed/quality mix
 
-// ── Middleware ───────────────────────────────────────────────────────────────
+  // ── Short brand names ─────────────────────────────────────────────────────
+  'GLM'        : 'z-ai/glm-5.2',
+  'DeepSeek'   : 'deepseek-ai/deepseek-v4-pro',
+  'Qwen'       : 'qwen/qwen3.5-397b-a17b',
+
+  // ── Add your own below ────────────────────────────────────────────────────
+  // 'mymodel' : 'nvidia/some-other-model-id',
+};
+
+// Used when the client sends no model name at all
+const DEFAULT_MODEL = MODEL_REGISTRY['default'];
+
+/**
+ * Resolves a model name from the client to a real NIM model string.
+ *   1. Looks up the name in MODEL_REGISTRY (case-insensitive).
+ *   2. Falls through to the raw name so full NIM IDs work without registration.
+ *   3. Falls back to DEFAULT_MODEL when nothing is provided.
+ */
+function resolveModel(requested) {
+  if (!requested) return DEFAULT_MODEL;
+  const key = requested.trim().toLowerCase();
+  return MODEL_REGISTRY[key] ?? requested.trim();
+}
+
+// ── Middleware ────────────────────────────────────────────────────────────────
 app.use(cors({
-  // Tighten this to your actual frontend origin in production, e.g.:
-  // origin: 'https://my-app.example.com'
+  // Tighten to your actual frontend origin in production, e.g.:
+  // origin: 'https://janitorai.com'
   origin: process.env.ALLOWED_ORIGIN || '*'
 }));
 app.use(express.json());
@@ -38,7 +76,7 @@ app.use(express.json());
 /**
  * Calls `fn` up to `maxAttempts` times, retrying only on 429 responses.
  * Waits `baseDelayMs * 2^attempt` ms between tries (exponential backoff).
- * Respects the `Retry-After` header from NVIDIA if present.
+ * Respects the Retry-After header from NVIDIA if present.
  */
 async function withRetry(fn, maxAttempts = 3, baseDelayMs = 1000) {
   let lastError;
@@ -48,12 +86,10 @@ async function withRetry(fn, maxAttempts = 3, baseDelayMs = 1000) {
       return await fn();
     } catch (err) {
       const status = err.response?.status;
-
       if (status !== 429) throw err; // Not rate-limited – rethrow immediately
 
       lastError = err;
 
-      // Honour Retry-After header if NVIDIA sends one (value is seconds)
       const retryAfter = err.response?.headers?.['retry-after'];
       const waitMs = retryAfter
         ? parseFloat(retryAfter) * 1000
@@ -63,72 +99,66 @@ async function withRetry(fn, maxAttempts = 3, baseDelayMs = 1000) {
         `Rate limited (429). Attempt ${attempt + 1}/${maxAttempts}. ` +
         `Retrying in ${Math.round(waitMs)}ms…`
       );
-
       await new Promise((resolve) => setTimeout(resolve, waitMs));
     }
   }
 
-  throw lastError; // All attempts exhausted
+  throw lastError;
 }
 
-// ── Helper ───────────────────────────────────────────────────────────────────
-/**
- * Build a minimal SSE data line by cloning the parsed SSE object and
- * overwriting delta.content, so the rest of the fields (id, model, …) are kept.
- */
-function buildSSELine(data, content) {
-  data.choices[0].delta.content = content;
-  return `data: ${JSON.stringify(data)}\n\n`;
-}
-
-// ── Health check ─────────────────────────────────────────────────────────────
+// ── Health check ──────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => {
   res.json({
-    status: 'ok',
-    service: 'OpenAI to NVIDIA NIM Proxy',
-    model: TARGET_MODEL,
+    status:           'ok',
+    service:          'OpenAI to NVIDIA NIM Proxy',
+    default_model:    DEFAULT_MODEL,
+    available_models: Object.keys(MODEL_REGISTRY),
     reasoning_display: SHOW_REASONING,
-    thinking_mode: ENABLE_THINKING_MODE
+    thinking_mode:    ENABLE_THINKING_MODE
   });
 });
 
-// ── List models (OpenAI-compatible) ─────────────────────────────────────────
+// ── List models (OpenAI-compatible) ──────────────────────────────────────────
+// Exposes every registered alias so JanitorAI's model picker can list them.
 app.get('/v1/models', (req, res) => {
-  res.json({
-    object: 'list',
-    data: [{
-      id: TARGET_MODEL,
-      object: 'model',
-      created: Math.floor(Date.now() / 1000),
-      owned_by: 'nvidia-nim-proxy'
-    }]
-  });
+  const now = Math.floor(Date.now() / 1000);
+  const data = Object.entries(MODEL_REGISTRY).map(([alias, nimId]) => ({
+    id:         alias,        // The shorthand the client uses
+    nim_model:  nimId,        // The actual NIM model it maps to (informational)
+    object:     'model',
+    created:    now,
+    owned_by:   'nvidia-nim-proxy'
+  }));
+
+  res.json({ object: 'list', data });
 });
 
-// ── Chat completions (main proxy) ────────────────────────────────────────────
+// ── Chat completions (main proxy) ─────────────────────────────────────────────
 app.post('/v1/chat/completions', async (req, res) => {
-  const { messages, temperature, max_tokens, stream } = req.body;
+  const { model, messages, temperature, max_tokens, stream } = req.body;
 
-  // ── Input validation ──────────────────────────────────────────────────────
+  // ── Input validation ────────────────────────────────────────────────────────
   if (!Array.isArray(messages) || messages.length === 0) {
     return res.status(400).json({
       error: {
         message: '`messages` must be a non-empty array.',
-        type: 'invalid_request_error',
-        code: 400
+        type:    'invalid_request_error',
+        code:    400
       }
     });
   }
 
-  // ── Build NIM request ─────────────────────────────────────────────────────
+  // ── Resolve model ───────────────────────────────────────────────────────────
+  const resolvedModel = resolveModel(model);
+  console.log(`Model requested: "${model ?? '(none)'}" → resolved: "${resolvedModel}"`);
+
+  // ── Build NIM request ───────────────────────────────────────────────────────
   const nimRequest = {
-    model: TARGET_MODEL,
+    model:       resolvedModel,
     messages,
-    // Use !== undefined so temperature: 0 is forwarded correctly
-    temperature: temperature !== undefined ? temperature : 0.7,
-    max_tokens: max_tokens || 9024,
-    stream: !!stream,
-    // Spread thinking flag at the top level, not inside extra_body
+    temperature: temperature !== undefined ? temperature : 0.7, // 0 must be forwarded
+    max_tokens:  max_tokens || 9024,
+    stream:      !!stream,
     ...(ENABLE_THINKING_MODE && { chat_template_kwargs: { thinking: true } })
   };
 
@@ -139,11 +169,10 @@ app.post('/v1/chat/completions', async (req, res) => {
         nimRequest,
         {
           headers: {
-            Authorization: `Bearer ${NIM_API_KEY}`,
+            Authorization:  `Bearer ${NIM_API_KEY}`,
             'Content-Type': 'application/json'
           },
-          // Prevent hung connections from blocking the server indefinitely
-          timeout: 30_000,
+          timeout:      30_000, // Prevent hung connections
           responseType: stream ? 'stream' : 'json'
         }
       )
@@ -153,23 +182,21 @@ app.post('/v1/chat/completions', async (req, res) => {
     if (stream) {
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
-      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('Connection',    'keep-alive');
 
       let buffer           = '';
-      let reasoningStarted = false; // tracks whether we opened a <think> tag
+      let reasoningStarted = false;
 
       response.data.on('data', (chunk) => {
         buffer += chunk.toString();
         const lines = buffer.split('\n');
-        // Keep any incomplete trailing line in the buffer
-        buffer = lines.pop() ?? '';
+        buffer = lines.pop() ?? ''; // Keep incomplete trailing line
 
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue;
 
-          // SSE termination signal – must end with double newline
           if (line.includes('[DONE]')) {
-            res.write('data: [DONE]\n\n');
+            res.write('data: [DONE]\n\n'); // Double newline required by SSE spec
             continue;
           }
 
@@ -178,28 +205,21 @@ app.post('/v1/chat/completions', async (req, res) => {
             const delta = data.choices?.[0]?.delta;
 
             if (delta) {
-              // NIM uses `reasoning_content` for chain-of-thought (not `_content`)
-              const reasoning = delta.reasoning_content ?? null;
+              const reasoning = delta.reasoning_content ?? null; // NIM's CoT field
               const content   = delta.content ?? null;
-
-              // Remove the NIM-specific field before forwarding
-              delete delta.reasoning_content;
+              delete delta.reasoning_content; // Strip NIM-specific field
 
               if (SHOW_REASONING) {
                 if (reasoning) {
-                  // First reasoning chunk: open the <think> tag
-                  // Subsequent chunks: just append reasoning text
-                  delta.content = (reasoningStarted ? '' : '<think>\n') + reasoning;
+                  delta.content    = (reasoningStarted ? '' : '<think>\n') + reasoning;
                   reasoningStarted = true;
                 } else if (content !== null && reasoningStarted) {
-                  // First content chunk after reasoning: close the tag
-                  delta.content = '</think>\n\n' + content;
+                  delta.content    = '</think>\n\n' + content;
                   reasoningStarted = false;
                 } else {
                   delta.content = content ?? '';
                 }
               } else {
-                // Reasoning hidden – forward only the main content
                 delta.content = content ?? '';
               }
             }
@@ -207,7 +227,7 @@ app.post('/v1/chat/completions', async (req, res) => {
             res.write(`data: ${JSON.stringify(data)}\n\n`);
           } catch (parseError) {
             console.error('SSE chunk parse error:', parseError.message);
-            // Do not re-emit the raw malformed line to the client
+            // Never re-emit a malformed chunk to the client
           }
         }
       });
@@ -218,7 +238,7 @@ app.post('/v1/chat/completions', async (req, res) => {
         res.end();
       });
 
-    // ── Non-streaming path ────────────────────────────────────────────────
+    // ── Non-streaming path ──────────────────────────────────────────────────
     } else {
       const choices = response.data.choices.map((choice) => {
         let content = choice.message?.content ?? '';
@@ -228,11 +248,8 @@ app.post('/v1/chat/completions', async (req, res) => {
         }
 
         return {
-          index: choice.index,
-          message: {
-            role: choice.message.role,
-            content
-          },
+          index:         choice.index,
+          message:       { role: choice.message.role, content },
           finish_reason: choice.finish_reason
         };
       });
@@ -241,8 +258,7 @@ app.post('/v1/chat/completions', async (req, res) => {
         id:      `chatcmpl-${Date.now()}`,
         object:  'chat.completion',
         created: Math.floor(Date.now() / 1000),
-        // Return the model that was actually used, not whatever the client sent
-        model:   TARGET_MODEL,
+        model:   resolvedModel, // Return the actual model used
         choices,
         usage: response.data.usage ?? {
           prompt_tokens:     0,
@@ -253,14 +269,14 @@ app.post('/v1/chat/completions', async (req, res) => {
     }
 
   } catch (error) {
-    // Log full error server-side for debugging
     console.error('Proxy error:', error.message);
+
     if (error.response) {
       console.error('Upstream status:', error.response.status);
 
       // When responseType is 'stream', error.response.data is a raw Node.js
-      // stream/socket — not parsed JSON — so JSON.stringify() would throw a
-      // "circular structure" TypeError. Guard against that here.
+      // socket/stream — not parsed JSON — so JSON.stringify() throws a
+      // "circular structure" TypeError. Detect and handle it safely.
       const rawData = error.response.data;
       if (rawData && typeof rawData === 'object' && typeof rawData.pipe === 'function') {
         console.error('Upstream body: <stream — not serialisable; check upstream logs>');
@@ -273,8 +289,7 @@ app.post('/v1/chat/completions', async (req, res) => {
       }
     }
 
-    // Return a sanitised error to the client – no internal details leaked
-    const status = error.response?.status || 500;
+    const status  = error.response?.status || 500;
     const message = status === 429
       ? 'The upstream NVIDIA NIM API is rate-limiting this proxy. Please try again shortly.'
       : 'The proxy failed to complete the request. Check server logs for details.';
@@ -285,7 +300,7 @@ app.post('/v1/chat/completions', async (req, res) => {
   }
 });
 
-// ── 404 catch-all ────────────────────────────────────────────────────────────
+// ── 404 catch-all ─────────────────────────────────────────────────────────────
 app.all('*', (req, res) => {
   res.status(404).json({
     error: {
@@ -296,11 +311,15 @@ app.all('*', (req, res) => {
   });
 });
 
-// ── Start server ─────────────────────────────────────────────────────────────
+// ── Start server ──────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
-  console.log(`OpenAI → NVIDIA NIM Proxy  listening on port ${PORT}`);
-  console.log(`Health check : http://localhost:${PORT}/health`);
-  console.log(`Target model : ${TARGET_MODEL}`);
-  console.log(`Reasoning    : ${SHOW_REASONING      ? 'VISIBLE'  : 'HIDDEN'}`);
-  console.log(`Thinking mode: ${ENABLE_THINKING_MODE ? 'ENABLED' : 'DISABLED'}`);
+  console.log(`\nOpenAI → NVIDIA NIM Proxy  listening on port ${PORT}`);
+  console.log(`Health check    : http://localhost:${PORT}/health`);
+  console.log(`Default model   : ${DEFAULT_MODEL}`);
+  console.log(`Registered aliases:`);
+  Object.entries(MODEL_REGISTRY).forEach(([alias, id]) =>
+    console.log(`  "${alias}" → ${id}`)
+  );
+  console.log(`Reasoning       : ${SHOW_REASONING       ? 'VISIBLE'  : 'HIDDEN'}`);
+  console.log(`Thinking mode   : ${ENABLE_THINKING_MODE ? 'ENABLED'  : 'DISABLED'}\n`);
 });
