@@ -35,15 +35,15 @@ const ENABLE_THINKING_MODE = false;
 //
 const MODEL_REGISTRY = {
   // ── Shorthand aliases ─────────────────────────────────────────────────────
-  'default'  : 'deepseek-ai/deepseek-v4-pro',
+  'default'  : 'minimaxai/minimax-m3',
   'fast'     : 'nvidia/nemotron-3-super-120b-a12b',        // Smaller, quicker
   'smart'    : 'google/gemma-4-31b-it',               // Largest, best reasoning
   'balanced' : 'mistralai/mistral-medium-3.5-128b',  // Good speed/quality mix
 
   // ── Short brand names ─────────────────────────────────────────────────────
   'glm'        : 'z-ai/glm-5.2',
-  'deepseek'   : 'deepseek-ai/deepseek-v4-pro',
-  'qwen'       : 'qwen/qwen3.5-397b-a17b',
+  'step'       : 'stepfun-ai/step-3.7-flash',
+  'llama'      : 'meta/llama-3.3-70b-instruct',
 
   // ── Add your own below ────────────────────────────────────────────────────
   // 'mymodel' : 'nvidia/some-other-model-id',
