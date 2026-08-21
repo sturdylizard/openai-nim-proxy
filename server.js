@@ -41,7 +41,7 @@ const MODEL_REGISTRY = {
   'balanced' : 'mistralai/mistral-medium-3.5-128b',  // Good speed/quality mix
 
   // ── Short brand names ─────────────────────────────────────────────────────
-  'glm'        : 'z-ai/glm-5.2',
+  'deepseek'   : 'deepseek-ai/deepseek-v4-flash-0731',
   'step'       : 'stepfun-ai/step-3.7-flash',
   'llama'      : 'meta/llama-3.3-70b-instruct',
 
