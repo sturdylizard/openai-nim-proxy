@@ -35,10 +35,10 @@ const ENABLE_THINKING_MODE = false;
 //
 const MODEL_REGISTRY = {
   // ── Shorthand aliases ─────────────────────────────────────────────────────
-  'default'  : 'minimaxai/minimax-m3',
+  'default'  : 'deepseek-ai/deepseek-v4-pro-0813',
   'fast'     : 'nvidia/nemotron-3-super-120b-a12b',        // Smaller, quicker
   'smart'    : 'google/gemma-4-31b-it',               // Largest, best reasoning
-  'balanced' : 'mistralai/mistral-medium-3.5-128b',  // Good speed/quality mix
+  'balanced' : 'moonshotai/kimi-k3',  // Good speed/quality mix
 
   // ── Short brand names ─────────────────────────────────────────────────────
   'deepseek'   : 'deepseek-ai/deepseek-v4-flash-0731',
