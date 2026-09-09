@@ -42,7 +42,7 @@ const MODEL_REGISTRY = {
 
   // ── Short brand names ─────────────────────────────────────────────────────
   'deepseek'   : 'deepseek-ai/deepseek-v4-flash-0731',
-  'step'       : 'stepfun-ai/step-3.7-flash',
+  'nvidia'     : 'nvidia/nemotron-3-ultra-550b-a55b',
   'llama'      : 'meta/llama-3.3-70b-instruct',
 
   // ── Add your own below ────────────────────────────────────────────────────
