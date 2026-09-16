@@ -35,8 +35,8 @@ const ENABLE_THINKING_MODE = false;
 //
 const MODEL_REGISTRY = {
   // ── Shorthand aliases ─────────────────────────────────────────────────────
-  'default'  : 'deepseek-ai/deepseek-v4-pro-0813',
-  'fast'     : 'nvidia/nemotron-3-super-120b-a12b',        // Smaller, quicker
+  'default'  : 'z-ai/glm-5.3',
+  'fast'     : 'z-ai/glm-5.3-flash',        // Smaller, quicker
   'smart'    : 'google/gemma-4-31b-it',               // Largest, best reasoning
   'balanced' : 'moonshotai/kimi-k3',  // Good speed/quality mix
 
