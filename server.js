@@ -37,13 +37,13 @@ const MODEL_REGISTRY = {
   // ── Shorthand aliases ─────────────────────────────────────────────────────
   'default'  : 'z-ai/glm-5.3',
   'fast'     : 'z-ai/glm-5.3-flash',        // Smaller, quicker
-  'smart'    : 'google/gemma-4-31b-it',               // Largest, best reasoning
-  'balanced' : 'moonshotai/kimi-k3',  // Good speed/quality mix
+  'smart'    : 'google/gemma-4-31b-it',    // Largest, best reasoning
+  'balanced' : 'moonshotai/kimi-k3',      // Good speed/quality mix
 
   // ── Short brand names ─────────────────────────────────────────────────────
-  'deepseek'   : 'deepseek-ai/deepseek-v4-flash-0731',
+  'mistral'    : 'mistralai/mistral-nemotron',
   'nvidia'     : 'nvidia/nemotron-3-ultra-550b-a55b',
-  'llama'      : 'meta/llama-3.3-70b-instruct',
+  'deepseek'   : 'deepseek-ai/deepseek-v4.1-flash',
 
   // ── Add your own below ────────────────────────────────────────────────────
   // 'mymodel' : 'nvidia/some-other-model-id',
