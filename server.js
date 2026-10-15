@@ -41,7 +41,7 @@ const MODEL_REGISTRY = {
   'balanced' : 'moonshotai/kimi-k3',      // Good speed/quality mix
 
   // ── Short brand names ─────────────────────────────────────────────────────
-  'mistral'    : 'mistralai/mistral-nemotron',
+  'step'       : 'stepfun-ai/step-5-preview',
   'nvidia'     : 'nvidia/nemotron-3-ultra-550b-a55b',
   'deepseek'   : 'deepseek-ai/deepseek-v4.1-flash',
 
