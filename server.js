@@ -38,7 +38,7 @@ const MODEL_REGISTRY = {
   'default'  : 'z-ai/glm-5.3',
   'fast'     : 'z-ai/glm-5.3-flash',        // Smaller, quicker
   'smart'    : 'google/gemma-4-31b-it',    // Largest, best reasoning
-  'balanced' : 'moonshotai/kimi-k3',      // Good speed/quality mix
+  'balanced' : 'minimaxai/minimax-m3.1-flash',      // Good speed/quality mix
 
   // ── Short brand names ─────────────────────────────────────────────────────
   'step'       : 'stepfun-ai/step-5-preview',
