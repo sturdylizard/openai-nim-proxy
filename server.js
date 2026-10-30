@@ -35,7 +35,7 @@ const ENABLE_THINKING_MODE = false;
 //
 const MODEL_REGISTRY = {
   // ── Shorthand aliases ─────────────────────────────────────────────────────
-  'default'  : 'z-ai/glm-5.3',
+  'default'  : 'mistralai/mistral-large-4-1t-a52b',
   'fast'     : 'z-ai/glm-5.3-flash',        // Smaller, quicker
   'smart'    : 'google/gemma-4-31b-it',    // Largest, best reasoning
   'balanced' : 'minimaxai/minimax-m3.1-flash',      // Good speed/quality mix
